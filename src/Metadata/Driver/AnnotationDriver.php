@@ -102,7 +102,7 @@ class AnnotationDriver implements AdvancedDriverInterface
             /** @var ?Embedded $embedded */
             $embedded = $this->getDoctrineEmbeddedAttribute($property);
             if ($embedded) {
-                $type = $this->getEmbeddedType($classMetadata, $embedded, $property);
+                $type = $this->getEmbeddedType($classMetadata, $property, $embedded);
 
                 $this->addUploadableClassProperties($classMetadata, new \ReflectionClass($type), $propertyPath.$property->getName().'.');
             }
@@ -137,7 +137,7 @@ class AnnotationDriver implements AdvancedDriverInterface
         return $attributes[0]->newInstance();
     }
 
-    private function getEmbeddedType(ClassMetadata $classMetadata, Embedded $embedded, \ReflectionProperty $property): string
+    private function getEmbeddedType(ClassMetadata $classMetadata, \ReflectionProperty $property, Embedded $embedded): string
     {
         return $embedded->class
             ?? $property->getType()?->getName()
