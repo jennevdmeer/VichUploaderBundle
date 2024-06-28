@@ -22,7 +22,7 @@ class AnnotationDriver implements AdvancedDriverInterface
      */
     public function __construct(
         protected readonly AnnotationReader|AttributeReader $reader,
-        private readonly array $managerRegistryList
+        private readonly array $managerRegistryList,
     ) {
     }
 
