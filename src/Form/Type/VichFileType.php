@@ -2,7 +2,6 @@
 
 namespace Vich\UploaderBundle\Form\Type;
 
-use Doctrine\ORM\Mapping\Embeddable;
 use Symfony\Component\Form\AbstractType;
 use Symfony\Component\Form\Extension\Core\Type;
 use Symfony\Component\Form\FormBuilderInterface;
@@ -14,6 +13,7 @@ use Symfony\Component\OptionsResolver\OptionsResolver;
 use Symfony\Component\PropertyAccess\PropertyAccess;
 use Symfony\Component\PropertyAccess\PropertyAccessorInterface;
 use Symfony\Component\PropertyAccess\PropertyPath;
+use Vich\UploaderBundle\Exception\NotUploadableException;
 use Vich\UploaderBundle\Form\DataTransformer\FileTransformer;
 use Vich\UploaderBundle\Handler\UploadHandlerInterface;
 use Vich\UploaderBundle\Mapping\PropertyMappingFactoryInterface;
@@ -81,21 +81,14 @@ class VichFileType extends AbstractType
     {
         // add delete only if there is a file
         $builder->addEventListener(FormEvents::PRE_SET_DATA, function (FormEvent $event) use ($options): void {
-            $form = $event->getForm();
-            $parent = $form->getParent();
-            // no object: no delete button
-            if (null === $parent) {
-                return;
-            }
-
-            [$fieldName, $object] = $this->getClosestNonEmbeddedObject($form);
+            [$object, $fieldName] = $this->resolveUploadableField($event->getForm());
 
             // no object or no uploaded file: no delete button
             if (null === $object || null === $this->storage->resolveUri($object, $fieldName)) {
                 return;
             }
 
-            $form->add('delete', Type\CheckboxType::class, [
+            $event->getForm()->add('delete', Type\CheckboxType::class, [
                 'label' => $options['delete_label'],
                 'mapped' => false,
                 'translation_domain' => $options['delete_label_translation_domain'] ?? $options['translation_domain'],
@@ -106,31 +99,29 @@ class VichFileType extends AbstractType
         // delete file if needed
         $builder->addEventListener(FormEvents::POST_SUBMIT, function (FormEvent $event): void {
             $form = $event->getForm();
-
-            [$fieldName, $object] = $this->getClosestNonEmbeddedObject($form);
-
             $delete = $form->has('delete') ? $form->get('delete')->getData() : false;
 
             if (!$delete) {
                 return;
             }
 
+            [$object, $fieldName] = $this->resolveUploadableField($form);
             $this->handler->remove($object, $fieldName);
         });
     }
 
     public function buildView(FormView $view, FormInterface $form, array $options): void
     {
-        [, $object] = $this->getClosestNonEmbeddedObject($form);
+        [$object, $fieldName] = $this->resolveUploadableField($form);
 
         $view->vars['object'] = $object;
         $view->vars['download_uri'] = null;
         if ($options['download_uri'] && $object) {
-            $view->vars['download_uri'] = $this->resolveUriOption($options['download_uri'], $object, $form);
+            $view->vars['download_uri'] = $this->resolveUriOption($options['download_uri'], $object, $fieldName);
 
             $view->vars = \array_replace(
                 $view->vars,
-                $this->resolveDownloadLabel($options['download_label'], $object, $form, $options)
+                $this->resolveDownloadLabel($options['download_label'], $object, $fieldName, $options)
             );
         }
 
@@ -144,13 +135,11 @@ class VichFileType extends AbstractType
 
     final protected function getFieldName(FormInterface $form): string
     {
-        return $form->getConfig()->getOption('property_path') ?? $form->getName();
+        return (string) ($form->getConfig()->getOption('property_path') ?? $form->getName());
     }
 
-    protected function resolveUriOption(mixed $uriOption, object $object, FormInterface $form): string|bool|null
+    protected function resolveUriOption(mixed $uriOption, object $object, string $fieldName): string|bool|null
     {
-        [$fieldName, $object] = $this->getClosestNonEmbeddedObject($form, $object);
-
         if (true === $uriOption) {
             return $this->storage->resolveUri($object, $fieldName);
         }
@@ -162,10 +151,9 @@ class VichFileType extends AbstractType
         return $uriOption;
     }
 
-    protected function resolveDownloadLabel(mixed $downloadLabel, object $object, FormInterface $form, array $options): array
+    protected function resolveDownloadLabel(mixed $downloadLabel, object $object, string $fieldName, array $options): array
     {
         if (true === $downloadLabel) {
-            $fieldName = $this->getFieldName($form);
             $mapping = $this->factory->fromField($object, $fieldName);
             if (null === $mapping) {
                 throw new \UnexpectedValueException(\sprintf('Cannot find mapping for "%s" field', $fieldName));
@@ -200,40 +188,34 @@ class VichFileType extends AbstractType
         ];
     }
 
-    protected function getClosestNonEmbeddedObject(FormInterface $form, ?object $object = null): array
+    /**
+     * @return array{?object, string}
+     */
+    protected function resolveUploadableField(FormInterface $form): array
     {
-        $currentForm = $form;
+        $fieldName = $this->getFieldName($form);
+        $path = $fieldName;
 
-        $fieldNames = [$this->getFieldName($currentForm)];
-        do {
-            $currentForm = $currentForm->getParent();
-            $data = $currentForm->getData();
-
-            if (!$this->isEmbeddable($data)) {
-                break;
+        for ($parent = $form->getParent(); null !== $parent; $parent = $parent->getParent()) {
+            $data = $parent->getData();
+            if (\is_object($data) && $this->hasUploadableField($data, $path)) {
+                return [$data, $path];
             }
 
-            array_unshift($fieldNames, $this->getFieldName($currentForm));
-        } while ($currentForm);
-
-        if (!$data) {
-            return [null, $object];
+            $path = $this->getFieldName($parent).'.'.$path;
         }
 
-        return [
-            implode('.', $fieldNames),
-            $data,
-        ];
+        $data = $form->getParent()?->getData();
+
+        return [\is_object($data) ? $data : null, $fieldName];
     }
 
-    protected function isEmbeddable(mixed $object): bool
+    private function hasUploadableField(object $object, string $field): bool
     {
-        if (!\is_object($object)) {
+        try {
+            return null !== $this->factory->fromField($object, $field);
+        } catch (NotUploadableException) {
             return false;
         }
-
-        $reflectionClass = new \ReflectionClass($object);
-
-        return !empty($reflectionClass->getAttributes(Embeddable::class));
     }
 }

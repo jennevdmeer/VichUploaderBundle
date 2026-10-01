@@ -3,14 +3,20 @@
 namespace Vich\UploaderBundle\Tests;
 
 use Doctrine\ORM\Mapping as ORM;
-use Vich\UploaderBundle\Mapping\Attribute as Vich;
 
-#[Vich\Uploadable]
+#[ORM\Entity]
 class DummyEmbeddingEntity
 {
+    #[ORM\Id]
+    #[ORM\Column]
+    #[ORM\GeneratedValue]
+    public ?int $id = null;
+
     #[ORM\Embedded(class: DummyEmbeddable::class)]
     public DummyEmbeddable $meta;
 
-    #[ORM\Embedded]
-    public DummyEmbeddable $typed;
+    public function __construct()
+    {
+        $this->meta = new DummyEmbeddable();
+    }
 }
