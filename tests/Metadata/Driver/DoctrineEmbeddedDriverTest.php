@@ -50,7 +50,7 @@ final class DoctrineEmbeddedDriverTest extends TestCase
 
     private function createParentClassDriver(): AdvancedDriverInterface
     {
-        return new class implements AdvancedDriverInterface {
+        return new class() implements AdvancedDriverInterface {
             public function loadMetadataForClass(\ReflectionClass $class): ?JMSClassMetadata
             {
                 if (DummyEmbeddableParent::class !== $class->name) {

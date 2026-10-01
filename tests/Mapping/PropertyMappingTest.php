@@ -103,7 +103,7 @@ class PropertyMappingTest extends TestCase
     #[Test]
     public function readPropertyThroughNullEmbeddable(): void
     {
-        $object = new class {
+        $object = new class() {
             public ?DummyEmbeddable $meta = null;
         };
         $prop = new PropertyMapping('meta.file', 'meta.fileName');
@@ -116,7 +116,7 @@ class PropertyMappingTest extends TestCase
     #[Test]
     public function writePropertyThroughNullEmbeddable(): void
     {
-        $object = new class {
+        $object = new class() {
             public ?DummyEmbeddable $meta = null;
         };
         $prop = new PropertyMapping('meta.file', 'meta.fileName');
