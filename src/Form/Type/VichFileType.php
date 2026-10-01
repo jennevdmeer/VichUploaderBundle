@@ -117,11 +117,11 @@ class VichFileType extends AbstractType
         $view->vars['object'] = $object;
         $view->vars['download_uri'] = null;
         if ($options['download_uri'] && $object) {
-            $view->vars['download_uri'] = $this->resolveUriOption($options['download_uri'], $object, $fieldName);
+            $view->vars['download_uri'] = $this->resolveUriOption($options['download_uri'], $object, $form);
 
             $view->vars = \array_replace(
                 $view->vars,
-                $this->resolveDownloadLabel($options['download_label'], $object, $fieldName, $options)
+                $this->resolveDownloadLabel($options['download_label'], $object, $form, $options)
             );
         }
 
@@ -138,22 +138,23 @@ class VichFileType extends AbstractType
         return (string) ($form->getConfig()->getOption('property_path') ?? $form->getName());
     }
 
-    protected function resolveUriOption(mixed $uriOption, object $object, string $fieldName): string|bool|null
+    protected function resolveUriOption(mixed $uriOption, object $object, FormInterface $form): string|bool|null
     {
         if (true === $uriOption) {
-            return $this->storage->resolveUri($object, $fieldName);
+            return $this->storage->resolveUri($object, $this->resolveUploadableField($form)[1]);
         }
 
         if (\is_callable($uriOption)) {
-            return $uriOption($object, $this->storage->resolveUri($object, $fieldName));
+            return $uriOption($object, $this->storage->resolveUri($object, $this->resolveUploadableField($form)[1]));
         }
 
         return $uriOption;
     }
 
-    protected function resolveDownloadLabel(mixed $downloadLabel, object $object, string $fieldName, array $options): array
+    protected function resolveDownloadLabel(mixed $downloadLabel, object $object, FormInterface $form, array $options): array
     {
         if (true === $downloadLabel) {
+            $fieldName = $this->resolveUploadableField($form)[1];
             $mapping = $this->factory->fromField($object, $fieldName);
             if (null === $mapping) {
                 throw new \UnexpectedValueException(\sprintf('Cannot find mapping for "%s" field', $fieldName));

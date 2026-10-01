@@ -82,15 +82,15 @@ class VichImageType extends VichFileType
                     $view->vars['image_uri'] = $this->cacheManager->getBrowserPath($path, $options['imagine_pattern']);
                 }
             } else {
-                $view->vars['image_uri'] = $this->resolveUriOption($options['image_uri'], $object, $fieldName);
+                $view->vars['image_uri'] = $this->resolveUriOption($options['image_uri'], $object, $form);
             }
 
             $view->vars = \array_replace(
                 $view->vars,
-                $this->resolveDownloadLabel($options['download_label'], $object, $fieldName, $options)
+                $this->resolveDownloadLabel($options['download_label'], $object, $form, $options)
             );
 
-            $view->vars['download_uri'] = $this->resolveUriOption($options['download_uri'], $object, $fieldName);
+            $view->vars['download_uri'] = $this->resolveUriOption($options['download_uri'], $object, $form);
         }
         $view->vars['asset_helper'] = $options['asset_helper'];
     }
