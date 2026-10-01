@@ -4,9 +4,11 @@ namespace Vich\UploaderBundle\Tests\Metadata\Driver;
 
 use Doctrine\DBAL\DriverManager;
 use Doctrine\ORM\EntityManager;
+use Doctrine\ORM\Mapping\Driver\AttributeDriver as OrmAttributeDriver;
 use Doctrine\ORM\ORMSetup;
 use Doctrine\Persistence\ManagerRegistry;
-use Doctrine\Persistence\Mapping\Driver\ClassNames;
+use Doctrine\Persistence\Mapping\ClassMetadata as PersistenceClassMetadata;
+use Doctrine\Persistence\Mapping\Driver\MappingDriver;
 use Metadata\ClassMetadata as JMSClassMetadata;
 use Metadata\Driver\AdvancedDriverInterface;
 use Metadata\Driver\DriverChain;
@@ -30,12 +32,12 @@ final class DoctrineEmbeddedDriverTest extends TestCase
 
     protected function setUp(): void
     {
-        if (\PHP_VERSION_ID < 80400 || !\class_exists(ClassNames::class)) {
-            self::markTestSkipped('Requires PHP 8.4 and doctrine/persistence 4.1.');
+        $config = ORMSetup::createConfiguration(true);
+        $config->setMetadataDriverImpl($this->createOrmMappingDriver());
+        if (\PHP_VERSION_ID >= 80400 && \method_exists($config, 'enableNativeLazyObjects')) {
+            $config->enableNativeLazyObjects(true);
         }
 
-        $config = ORMSetup::createAttributeMetadataConfig(new ClassNames([DummyEmbeddingEntity::class, DummyEmbeddable::class, DummyNestedEmbeddable::class]), true);
-        $config->enableNativeLazyObjects(true);
         $entityManager = new EntityManager(DriverManager::getConnection(['driver' => 'pdo_sqlite', 'memory' => true]), $config);
 
         $registry = $this->createStub(ManagerRegistry::class);
@@ -46,6 +48,33 @@ final class DoctrineEmbeddedDriverTest extends TestCase
 
         $this->innerDriver = new DriverChain([new AttributeDriver(new AttributeReader(), [$registry]), $this->createParentClassDriver()]);
         $this->driver = new DoctrineEmbeddedDriver($this->innerDriver, [$registry]);
+    }
+
+    private function createOrmMappingDriver(): MappingDriver
+    {
+        return new class() implements MappingDriver {
+            private OrmAttributeDriver $driver;
+
+            public function __construct()
+            {
+                $this->driver = new OrmAttributeDriver([], true);
+            }
+
+            public function loadMetadataForClass(string $className, PersistenceClassMetadata $metadata): void
+            {
+                $this->driver->loadMetadataForClass($className, $metadata);
+            }
+
+            public function getAllClassNames(): array
+            {
+                return [DummyEmbeddingEntity::class, DummyEmbeddable::class, DummyNestedEmbeddable::class];
+            }
+
+            public function isTransient(string $className): bool
+            {
+                return !\in_array($className, $this->getAllClassNames(), true);
+            }
+        };
     }
 
     private function createParentClassDriver(): AdvancedDriverInterface
